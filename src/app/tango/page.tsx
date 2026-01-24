@@ -64,6 +64,7 @@ export default function TangoPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [showErrors, setShowErrors] = useState(true);
+  const [moveHistory, setMoveHistory] = useState<Grid[]>([]);
 
   // Generate new puzzle
   const newGame = useCallback(
@@ -74,6 +75,7 @@ export default function TangoPage() {
       setTimer(0);
       setIsRunning(true);
       setIsComplete(false);
+      setMoveHistory([]);
     },
     [difficulty],
   );
@@ -125,6 +127,8 @@ export default function TangoPage() {
       ? updateErrorStates(newGrid, puzzle.constraints)
       : newGrid;
 
+    // Save current grid to history before updating
+    setMoveHistory((prev) => [...prev, grid]);
     setGrid(updatedGrid);
 
     const validation = validateGrid(updatedGrid, puzzle.constraints);
@@ -347,6 +351,27 @@ export default function TangoPage() {
             hover:bg-blue-600 active:bg-blue-700 transition-colors"
         >
           New Puzzle
+        </button>
+
+        <button
+          onClick={() => {
+            if (moveHistory.length > 0 && puzzle) {
+              const previousGrid = moveHistory[moveHistory.length - 1];
+              const restoredGrid = showErrors
+                ? updateErrorStates(previousGrid, puzzle.constraints)
+                : previousGrid;
+              setGrid(restoredGrid);
+              setMoveHistory((prev) => prev.slice(0, -1));
+            }
+          }}
+          disabled={moveHistory.length === 0}
+          className={`px-6 py-3 rounded-lg text-lg font-medium transition-colors ${
+            moveHistory.length > 0
+              ? "bg-yellow-500 text-white hover:bg-yellow-600"
+              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          Undo
         </button>
 
         <button
