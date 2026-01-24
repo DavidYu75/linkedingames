@@ -8,7 +8,6 @@ import {
 } from "@/lib/tango/generator";
 import { validateGrid, updateErrorStates } from "@/lib/tango/validator";
 import {
-  Puzzle,
   Grid,
   Symbol,
   Difficulty,
@@ -56,12 +55,22 @@ function MoonIcon() {
   );
 }
 
+// Helper to create initial game state
+function createInitialGameState(diff: Difficulty) {
+  const puzzle = generatePuzzle(diff);
+  const grid = createGameGrid(puzzle);
+  return { puzzle, grid };
+}
+
 export default function TangoPage() {
-  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
-  const [grid, setGrid] = useState<Grid | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+
+  // Use lazy initialization to avoid useEffect for initial state
+  const [{ puzzle, grid }, setGameState] = useState(() =>
+    createInitialGameState("medium"),
+  );
   const [timer, setTimer] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunning] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
   const [showErrors, setShowErrors] = useState(true);
   const [moveHistory, setMoveHistory] = useState<Grid[]>([]);
@@ -69,9 +78,8 @@ export default function TangoPage() {
   // Generate new puzzle
   const newGame = useCallback(
     (diff: Difficulty = difficulty) => {
-      const newPuzzle = generatePuzzle(diff);
-      setPuzzle(newPuzzle);
-      setGrid(createGameGrid(newPuzzle));
+      const { puzzle: newPuzzle, grid: newGrid } = createInitialGameState(diff);
+      setGameState({ puzzle: newPuzzle, grid: newGrid });
       setTimer(0);
       setIsRunning(true);
       setIsComplete(false);
@@ -79,11 +87,6 @@ export default function TangoPage() {
     },
     [difficulty],
   );
-
-  // Initial load
-  useEffect(() => {
-    newGame();
-  }, []);
 
   // Timer
   useEffect(() => {
@@ -95,6 +98,26 @@ export default function TangoPage() {
     }
     return () => clearInterval(interval);
   }, [isRunning, isComplete]);
+
+  // Update error states when showErrors is toggled or grid changes (with delay)
+  useEffect(() => {
+    if (grid && puzzle && showErrors) {
+      const timeoutId = setTimeout(() => {
+        const updatedGrid = updateErrorStates(grid, puzzle.constraints);
+        // Only update if error states actually changed
+        const hasChanges = grid.some((row, rIdx) =>
+          row.some(
+            (cell, cIdx) => cell.hasError !== updatedGrid[rIdx][cIdx].hasError,
+          ),
+        );
+        if (hasChanges) {
+          setGameState({ puzzle, grid: updatedGrid });
+        }
+      }, 1000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showErrors, grid, puzzle]);
 
   // Format timer display
   const formatTime = (seconds: number): string => {
@@ -117,23 +140,20 @@ export default function TangoPage() {
     const newGrid = grid.map((r, rIdx) =>
       r.map((c, cIdx) => {
         if (rIdx === row && cIdx === col) {
-          return { ...c, value: nextValue };
+          return { ...c, value: nextValue, hasError: false };
         }
         return c;
       }),
     );
 
-    const updatedGrid = showErrors
-      ? updateErrorStates(newGrid, puzzle.constraints)
-      : newGrid;
-
     // Save current grid to history before updating
     setMoveHistory((prev) => [...prev, grid]);
-    setGrid(updatedGrid);
+    // Don't update error states here - let the useEffect with delay handle it
+    setGameState({ puzzle, grid: newGrid });
 
-    const validation = validateGrid(updatedGrid, puzzle.constraints);
+    const validation = validateGrid(newGrid, puzzle.constraints);
     if (validation.isComplete && validation.isValid) {
-      if (checkSolution(updatedGrid, puzzle.solution)) {
+      if (checkSolution(newGrid, puzzle.solution)) {
         setIsComplete(true);
         setIsRunning(false);
       }
@@ -275,18 +295,22 @@ export default function TangoPage() {
                 <button
                   onClick={() => handleCellClick(rIndex, cIndex)}
                   disabled={cell.isGiven}
-                  style={{ width: cellSize, height: cellSize }}
+                  style={{
+                    width: cellSize,
+                    height: cellSize,
+                    backgroundColor:
+                      cell.hasError && showErrors
+                        ? "#fecaca"
+                        : cell.isGiven
+                          ? "#f5f5f4"
+                          : "#ffffff",
+                  }}
                   className={`
                     border-r border-b border-gray-300
                     flex items-center justify-center
                     transition-colors
                     p-3
-                    ${
-                      cell.isGiven
-                        ? "bg-stone-100 cursor-default"
-                        : "bg-white cursor-pointer hover:bg-blue-50 active:bg-blue-100"
-                    }
-                    ${cell.hasError && showErrors ? "bg-red-100" : ""}
+                    ${!cell.isGiven && "cursor-pointer hover:bg-blue-50 active:bg-blue-100"}
                   `}
                 >
                   {cell.value === "sun" && <SunIcon />}
@@ -360,7 +384,7 @@ export default function TangoPage() {
               const restoredGrid = showErrors
                 ? updateErrorStates(previousGrid, puzzle.constraints)
                 : previousGrid;
-              setGrid(restoredGrid);
+              setGameState({ puzzle, grid: restoredGrid });
               setMoveHistory((prev) => prev.slice(0, -1));
             }
           }}
