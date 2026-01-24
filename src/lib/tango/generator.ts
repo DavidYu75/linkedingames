@@ -15,7 +15,7 @@ import {
   DIFFICULTY_CONFIG,
 } from "./types";
 import { validateGrid } from "./validator";
-import { hasUniqueSolution, createEmptyGrid, gridToSymbols } from "./solver";
+import { hasUniqueSolution } from "./solver";
 
 /**
  * Generate a random ID for puzzles
@@ -257,8 +257,21 @@ function cloneGrid(grid: Grid): Grid {
 }
 
 /**
+ * Get all cells that are involved in any constraint
+ */
+function getConstraintCells(constraints: EdgeConstraint[]): Set<string> {
+  const cells = new Set<string>();
+  for (const constraint of constraints) {
+    cells.add(`${constraint.cellA[0]},${constraint.cellA[1]}`);
+    cells.add(`${constraint.cellB[0]},${constraint.cellB[1]}`);
+  }
+  return cells;
+}
+
+/**
  * Minimize the puzzle by removing cells while maintaining unique solution
  * Uses iterative cell removal with uniqueness checking
+ * IMPORTANT: Cells with constraints (= or ×) are always removed first and never kept as givens
  */
 function minimizePuzzle(
   grid: Grid,
@@ -266,18 +279,39 @@ function minimizePuzzle(
   constraints: EdgeConstraint[],
   targetGivens: { min: number; max: number },
 ): Grid {
-  // Get all cell positions in random order
+  let currentGrid = cloneGrid(grid);
+
+  // First, ALWAYS remove cells that are part of constraints
+  // These cells should never be pre-filled so the player can use the constraints
+  const constraintCells = getConstraintCells(constraints);
+  for (const cellKey of constraintCells) {
+    const [row, col] = cellKey.split(",").map(Number);
+    currentGrid[row][col].value = null;
+    currentGrid[row][col].isGiven = false;
+  }
+
+  // Verify the puzzle is still solvable after removing constraint cells
+  if (!hasUniqueSolution(currentGrid, constraints)) {
+    // If not uniquely solvable, we need to regenerate
+    // This shouldn't happen often with good constraint generation
+    throw new Error(
+      "Puzzle not uniquely solvable after removing constraint cells",
+    );
+  }
+
+  // Get all remaining cell positions (non-constraint cells) in random order
   const positions: [number, number][] = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
-      positions.push([row, col]);
+      const key = `${row},${col}`;
+      if (!constraintCells.has(key)) {
+        positions.push([row, col]);
+      }
     }
   }
 
-  // Shuffle positions (prefer removing from center first for harder puzzles)
+  // Shuffle positions for variety
   const shuffledPositions = shuffle(positions);
-
-  let currentGrid = cloneGrid(grid);
 
   for (const [row, col] of shuffledPositions) {
     // Skip if already at minimum givens
@@ -298,7 +332,6 @@ function minimizePuzzle(
 
     // Stop if we've reached target range
     if (countGivens(currentGrid) <= targetGivens.max) {
-      // Continue removing to get to target, but don't go below min
       if (countGivens(currentGrid) <= targetGivens.min) {
         break;
       }
@@ -325,11 +358,18 @@ export function generatePuzzle(difficulty: Difficulty = "medium"): Puzzle {
   const constraints = generateConstraints(solution, constraintCount);
 
   // Phase 3: Create full grid and minimize
-  const fullGrid = solutionToGrid(solution);
-  const puzzleGrid = minimizePuzzle(fullGrid, solution, constraints, {
-    min: config.minGivens,
-    max: config.maxGivens,
-  });
+  // This may throw if puzzle isn't uniquely solvable after removing constraint cells
+  let puzzleGrid: Grid;
+  try {
+    const fullGrid = solutionToGrid(solution);
+    puzzleGrid = minimizePuzzle(fullGrid, solution, constraints, {
+      min: config.minGivens,
+      max: config.maxGivens,
+    });
+  } catch {
+    // Retry with a new puzzle
+    return generatePuzzle(difficulty);
+  }
 
   // Validate the generated puzzle
   const validation = validateGrid(puzzleGrid, constraints);
