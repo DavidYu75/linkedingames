@@ -10,9 +10,9 @@ export default function Home() {
         <p className="text-lg text-muted-foreground max-w-[600px]">
           Play unlimited versions of your favorite LinkedIn puzzle games.
         </p>
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mt-8">
-          <Link 
+          <Link
             href="/queens"
             className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
           >
@@ -27,15 +27,20 @@ export default function Home() {
             </p>
           </Link>
 
-          {/* Placeholders for future games */}
-          <div className="rounded-lg border border-transparent px-5 py-4 opacity-50 cursor-not-allowed">
+          <Link
+            href="/tango"
+            className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
+          >
             <h2 className="mb-3 text-2xl font-semibold">
-              Tango
+              Tango{" "}
+              <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
+                -&gt;
+              </span>
             </h2>
             <p className="m-0 max-w-[30ch] text-sm opacity-50">
-              Coming soon...
+              Fill the grid with suns and moons following the constraints.
             </p>
-          </div>
+          </Link>
         </div>
       </main>
     </div>
