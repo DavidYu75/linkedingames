@@ -42,3 +42,6 @@ next-env.d.ts
 
 # claude
 CLAUDE.md
+
+# design docs
+tango-design-doc.md
